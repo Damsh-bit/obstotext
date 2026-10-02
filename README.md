@@ -11,10 +11,15 @@ Feedback, Próximos pasos, Comentarios adicionales y calificación de 1 a 5 estr
    de 8 minutos (~2.9 MB cada uno). Un video de 30 min se procesa en segundos.
 2. **Transcripción** — cada fragmento pasa por `/api/transcribe`, que lo reenvía a Whisper (Groq u OpenAI). El final
    de cada fragmento se usa como contexto del siguiente para que los nombres y frases cortadas queden consistentes.
-3. **Respuestas** — la transcripción completa va a `/api/analyze`, que usa Claude (`claude-opus-5-5`) con salida
-   estructurada para completar cada campo del formulario.
-4. **Resultado** — el formulario aparece con el mismo orden que el CRM; cada respuesta es editable y tiene su botón
-   **Copiar**. También se puede copiar todo, descargarlo como `.txt` y ver/descargar la transcripción.
+3. **Respuestas**, en uno de dos modos:
+   - **Gratis (sin `ANTHROPIC_API_KEY`)** — la app arma un prompt con la transcripción, las instrucciones y todas las
+     preguntas. Se copia con un botón, se pega en [claude.ai](https://claude.ai) (sirve la cuenta gratuita) y Claude
+     devuelve el formulario respondido en el mismo orden que el CRM.
+   - **Automático (con `ANTHROPIC_API_KEY`)** — la transcripción va a `/api/analyze`, que usa Claude
+     (`claude-opus-5-5`) con salida estructurada. El formulario aparece en la app, cada respuesta es editable y tiene
+     su botón **Copiar**; también se puede copiar todo o descargarlo como `.txt`.
+
+Las instrucciones para Claude son las mismas en los dos modos y están en [`lib/prompt.ts`](lib/prompt.ts).
 
 **Nada se guarda.** El audio y la transcripción solo existen en memoria durante el proceso; al tocar
 «Nueva reunión» o cerrar la pestaña, se borra todo. No hay base de datos.
@@ -43,13 +48,14 @@ Abrir http://localhost:3000. Sin claves la app igual abre y se puede ver un ejem
 | --- | --- | --- |
 | `GROQ_API_KEY` | una de las dos | Transcripción con Whisper large-v3 en Groq (recomendado: rápido y barato). |
 | `OPENAI_API_KEY` | una de las dos | Transcripción con Whisper en OpenAI. |
-| `ANTHROPIC_API_KEY` | sí | Respuestas del formulario con Claude. |
+| `ANTHROPIC_API_KEY` | no | Si está, la app responde el formulario sola con Claude. Si no, entrega el prompt para claude.ai (gratis). |
 | `ACCESS_CODE` | recomendada al publicar | Si se define, la app pide este código antes de procesar (evita que cualquiera con el link use tus créditos). |
 | `TRANSCRIPTION_PROVIDER` | no | Fuerza `groq` u `openai`. |
 | `TRANSCRIPTION_MODEL` | no | Cambia el modelo de transcripción. |
 | `ANTHROPIC_MODEL` | no | Cambia el modelo de Claude (por defecto `claude-opus-5-5`). |
 
-Costo aproximado por reunión de 30 min: unos centavos de dólar de transcripción en Groq más ~USD 0.10 de Claude.
+Costo: en modo gratis, solo la transcripción (el plan gratuito de Groq alcanza para varias reuniones por día). En modo
+automático se suman ~USD 0.10 de Claude por reunión de 30 min.
 
 ## Publicar en Vercel
 

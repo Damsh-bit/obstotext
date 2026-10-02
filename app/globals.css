@@ -416,6 +416,67 @@ code {
   outline: none;
 }
 
+.results-heading {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* ---------- Modo prompt (claude.ai) ---------- */
+
+.prompt-steps ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.prompt-steps li {
+  counter-increment: step;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.prompt-steps li::before {
+  content: counter(step);
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+  color: #fff;
+  background: var(--primary);
+}
+
+.prompt-steps li > div {
+  flex: 1;
+}
+
+.prompt-steps .btn {
+  flex: none;
+  text-decoration: none;
+}
+
+.prompt-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  margin-top: 12px;
+}
+
 .results-actions {
   display: flex;
   gap: 8px;
@@ -593,6 +654,19 @@ code {
 
   .results-actions {
     justify-content: flex-start;
+  }
+
+  .prompt-steps li {
+    flex-wrap: wrap;
+  }
+
+  /* El botón baja debajo del texto, alineado con él (círculo 26px + gap 14px). */
+  .prompt-steps li > div {
+    flex-basis: calc(100% - 40px);
+  }
+
+  .prompt-steps .btn {
+    margin-left: 40px;
   }
 
   .hero h1 {

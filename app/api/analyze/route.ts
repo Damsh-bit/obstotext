@@ -2,7 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { ALL_QUESTIONS, RATING_LABEL, type Analysis, type QuestionId } from "@/lib/questions";
+import { API_SYSTEM_PROMPT, buildApiPrompt } from "@/lib/prompt";
+import { ALL_QUESTIONS, type Analysis, type QuestionId } from "@/lib/questions";
 import { analysisConfig, rejectWithoutAccess } from "@/lib/server/config";
 
 export const maxDuration = 300;
@@ -25,32 +26,6 @@ const AnalysisSchema = z.object({
     justificacion: z.string().describe("Una o dos oraciones que expliquen la calificación."),
   }),
 });
-
-const SYSTEM_PROMPT = `Eres un analista de ventas B2B. Recibes la transcripción automática de una reunión comercial entre un comercial de nuestra empresa y un prospecto, y completas el formulario de calificación que el comercial carga en el CRM después de cada reunión.
-
-Cómo responder:
-- Basa cada respuesta únicamente en lo que se dijo en la reunión. No inventes cifras, nombres, cargos ni fechas. Si algo se insinuó pero no se dijo de forma explícita, preséntalo como inferencia ("Se infiere que...").
-- Si un tema no se tocó, responde "No se mencionó en la reunión." y, si aporta, agrega en una frase qué convendría preguntar en el próximo contacto.
-- La transcripción no separa hablantes y puede tener errores de reconocimiento en nombres propios, siglas y cifras. Deduce por el contexto quién es el comercial y quién el prospecto, y corrige errores evidentes de transcripción solo cuando el contexto lo deje claro.
-- Escribe en español, en tercera persona, con tono profesional y directo, listo para pegar en el CRM. Incluye datos concretos: montos, rangos, plazos, nombres y cargos, herramientas o proveedores actuales, competidores mencionados y citas breves del prospecto cuando aporten.
-- Sé completo pero conciso: normalmente de una a cuatro oraciones por respuesta. Usa viñetas ("- ") solo cuando haya varios elementos.
-- Calificación ("${RATING_LABEL}"): evalúa la reunión como oportunidad comercial. 1 = no califica o no hay interés; 3 = hay interés pero con dudas importantes en presupuesto, autoridad, necesidad o tiempo; 5 = oportunidad muy calificada con próximos pasos concretos.`;
-
-function buildUserPrompt(transcript: string): string {
-  const fields = ALL_QUESTIONS.map((q) => {
-    const hint = q.hint ? ` ${q.hint}` : "";
-    return `- ${q.id}: ${q.label}${hint} Qué incluir: ${q.guide}`;
-  }).join("\n");
-
-  return `<transcripcion>
-${transcript}
-</transcripcion>
-
-Completa el formulario de calificación de esta reunión. Campos de "respuestas" (campo: pregunta y guía):
-${fields}
-
-Además identifica al prospecto (nombre y empresa) y califica la reunión de 1 a 5 estrellas con una justificación breve.`;
-}
 
 /**
  * Recibe la transcripción completa y devuelve las respuestas del formulario.
@@ -87,8 +62,8 @@ export async function POST(req: Request) {
       betas: ["server-side-fallback-2026-07-01"],
       fallbacks: "default",
       output_config: { effort: "high", format: betaZodOutputFormat(AnalysisSchema) },
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: buildUserPrompt(transcript) }],
+      system: API_SYSTEM_PROMPT,
+      messages: [{ role: "user", content: buildApiPrompt(transcript) }],
     });
     const message = await stream.finalMessage();
 

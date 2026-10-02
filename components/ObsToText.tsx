@@ -5,7 +5,9 @@ import { analyzeTranscript, ApiError, fetchStatus, transcribeChunk, type AppStat
 import { DEMO_ANALYSIS, DEMO_TRANSCRIPT } from "@/lib/demo";
 import { extractAudioChunks } from "@/lib/extract-audio";
 import { formTitle, type Analysis } from "@/lib/questions";
+import { PromptView } from "./PromptView";
 import { ResultsForm } from "./ResultsForm";
+import { slug } from "./shared";
 
 const STEPS = [
   { key: "load", label: "Preparando el extractor de audio" },
@@ -16,11 +18,14 @@ const STEPS = [
 
 type StepKey = (typeof STEPS)[number]["key"];
 
+// "done": formulario respondido por la API de Claude.
+// "prompt": sin ANTHROPIC_API_KEY, se entrega el prompt para pegar en claude.ai.
 type Phase =
   | { kind: "idle" }
   | { kind: "working"; step: StepKey; detail: string; ratio: number | null }
   | { kind: "error"; message: string }
-  | { kind: "done" };
+  | { kind: "done" }
+  | { kind: "prompt" };
 
 const ACCESS_CODE_KEY = "obstotext:access-code";
 
@@ -75,8 +80,12 @@ export function ObsToText() {
     fetchStatus().then(setStatus, () => setStatus(null));
   }, []);
 
+  // Con ANTHROPIC_API_KEY la app responde sola; sin ella, entrega el prompt para claude.ai (gratis).
+  const autoMode = status?.analysis.configured === true;
+  const hasResult = !isDemo && (analysis !== null || phase.kind === "prompt");
+
   // Evita perder el trabajo (o cortar el proceso) cerrando la pestaña sin querer.
-  const hasWork = phase.kind === "working" || (analysis !== null && !isDemo);
+  const hasWork = phase.kind === "working" || hasResult;
   useEffect(() => {
     if (!hasWork) return;
     const warn = (event: BeforeUnloadEvent) => event.preventDefault();
@@ -143,7 +152,11 @@ export function ObsToText() {
       if (!fullText) throw new Error("No se detectó voz en el audio del video.");
       setTranscript(fullText);
 
-      await runAnalysis(fullText, signal);
+      if (autoMode) {
+        await runAnalysis(fullText, signal);
+      } else {
+        setPhase({ kind: "prompt" });
+      }
     } catch (error) {
       handleError(error, signal);
     }
@@ -165,7 +178,7 @@ export function ObsToText() {
   }
 
   function reset() {
-    if (analysis && !isDemo && !window.confirm("¿Borrar este formulario y empezar con otra reunión?")) return;
+    if (hasResult && !window.confirm("¿Borrar esta reunión y empezar con otra?")) return;
     abortRef.current?.abort();
     setFile(null);
     setTranscript("");
@@ -177,11 +190,15 @@ export function ObsToText() {
   }
 
   function showDemo() {
-    setAnalysis(structuredClone(DEMO_ANALYSIS));
     setTranscript(DEMO_TRANSCRIPT);
-    setTitle(formTitle(DEMO_ANALYSIS.prospecto));
     setIsDemo(true);
-    setPhase({ kind: "done" });
+    if (autoMode) {
+      setAnalysis(structuredClone(DEMO_ANALYSIS));
+      setTitle(formTitle(DEMO_ANALYSIS.prospecto));
+      setPhase({ kind: "done" });
+    } else {
+      setPhase({ kind: "prompt" });
+    }
   }
 
   function pickFile(candidate: File | undefined | null) {
@@ -204,30 +221,33 @@ export function ObsToText() {
     );
   }
 
-  const missing = status
-    ? [
-        !status.transcription.configured && status.transcription.keyEnv,
-        !status.analysis.configured && status.analysis.keyEnv,
-      ].filter((v): v is string => Boolean(v))
-    : [];
+  if (phase.kind === "prompt") {
+    const fileBase = file ? slug(file.name.replace(/\.[^.]+$/, "")) : "reunion";
+    return <PromptView transcript={transcript} fileBase={fileBase} isDemo={isDemo} onReset={reset} />;
+  }
+
+  // Solo la transcripción es imprescindible: sin la clave de Claude se usa el modo prompt.
+  const missingKey = status && !status.transcription.configured ? status.transcription.keyEnv : null;
   const working = phase.kind === "working";
-  const currentStep = working ? STEPS.findIndex((s) => s.key === phase.step) : -1;
-  const canRetryAnalysis = phase.kind === "error" && transcript.length > 0;
+  const steps = autoMode ? STEPS : STEPS.filter((s) => s.key !== "analyze");
+  const currentStep = working ? steps.findIndex((s) => s.key === phase.step) : -1;
+  const canRetryAnalysis = autoMode && phase.kind === "error" && transcript.length > 0;
 
   return (
     <div className="upload-page">
       <header className="hero">
         <h1>Del video al formulario</h1>
         <p>
-          Sube la grabación de la reunión (MP4 de OBS). Se extrae el audio, se transcribe completo y la IA responde las
-          preguntas del formulario de calificación.
+          {autoMode
+            ? "Sube la grabación de la reunión (MP4 de OBS). Se extrae el audio, se transcribe completo y la IA responde las preguntas del formulario de calificación."
+            : "Sube la grabación de la reunión (MP4 de OBS). Se extrae el audio, se transcribe completo y te damos un prompt listo para pegar en Claude (gratis en claude.ai), que responde todas las preguntas del formulario."}
         </p>
       </header>
 
-      {missing.length > 0 && (
+      {missingKey && (
         <div className="notice notice-warn" role="status">
-          <strong>Falta configuración en el servidor.</strong> Agrega {missing.join(" y ")} en <code>.env.local</code> (o en
-          las variables de entorno de Vercel) para poder procesar videos.
+          <strong>Falta configuración en el servidor.</strong> Agrega {missingKey} en <code>.env.local</code> (o en las
+          variables de entorno de Vercel) para poder transcribir videos.
         </div>
       )}
 
@@ -294,7 +314,7 @@ export function ObsToText() {
       {working && (
         <div className="progress-card" aria-live="polite">
           <ol className="steps">
-            {STEPS.map((step, i) => {
+            {steps.map((step, i) => {
               const state = i < currentStep ? "done" : i === currentStep ? "active" : "pending";
               return (
                 <li key={step.key} className={`step step-${state}`}>
